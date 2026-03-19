@@ -206,7 +206,7 @@
     color: #667eea;
 }
 
-/* ── History Table ────────────────────────────────── */
+/* ── History Header ──────────────────────────────── */
 .history-header {
     display: flex;
     justify-content: space-between;
@@ -248,45 +248,127 @@
 
 .refresh-btn:hover { background: rgba(102, 126, 234, 0.25); }
 
-.history-table-wrap {
-    overflow-x: auto;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+/* ── Scan Cards Grid ─────────────────────────────── */
+.scan-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
     margin-bottom: 24px;
 }
 
-.history-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.82rem;
+.scan-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
-.history-table th {
-    padding: 12px 14px;
-    text-align: left;
-    background: rgba(255, 255, 255, 0.04);
-    color: #8892a4;
-    font-weight: 600;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+.scan-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.scan-fresh { border-left: 4px solid #00e676; }
+.scan-rotten { border-left: 4px solid #ff1744; }
+
+/* Card Image */
+.scan-card-img {
+    width: 100%;
+    height: 180px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.scan-card-img img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.35s ease;
+}
+
+.scan-card:hover .scan-card-img img {
+    transform: scale(1.05);
+}
+
+.no-img {
+    font-size: 3rem;
+    opacity: 0.2;
+}
+
+/* Card Body */
+.scan-card-body {
+    padding: 14px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+.scan-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.scan-produce-name {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f0f4ff;
+    text-transform: capitalize;
+}
+
+.verdict-chip {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.75rem;
     white-space: nowrap;
 }
 
-.history-table td {
-    padding: 10px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    color: #b0bec5;
+.vc-good { background: rgba(0, 230, 118, 0.15); color: #00e676; }
+.vc-bad { background: rgba(255, 23, 68, 0.15); color: #ff1744; }
+
+/* Card Metrics */
+.scan-card-metrics {
+    display: flex;
+    gap: 16px;
 }
 
-.history-table tr:hover td {
-    background: rgba(255, 255, 255, 0.02);
+.scm-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.row-fresh td:first-child { border-left: 3px solid #00e676; }
-.row-rotten td:first-child { border-left: 3px solid #ff1744; }
+.scm-label {
+    font-size: 0.7rem;
+    color: #6b7a90;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
 
-.td-id { color: #4a5568; font-weight: 600; }
-.td-file { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.td-time { font-size: 0.75rem; color: #4a5568; white-space: nowrap; }
+.scm-value {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #e0e6ed;
+}
+
+/* Card Footer */
+.scan-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
 
 .type-badge {
     padding: 3px 8px;
@@ -298,15 +380,46 @@
     text-transform: capitalize;
 }
 
-.verdict-chip {
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-weight: 700;
-    font-size: 0.75rem;
+.scan-time {
+    font-size: 0.72rem;
+    color: #4a5568;
 }
 
-.vc-good { background: rgba(0, 230, 118, 0.15); color: #00e676; }
-.vc-bad { background: rgba(255, 23, 68, 0.15); color: #ff1744; }
+/* Delete Button */
+.scan-delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    color: #ff6b6b;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.25s ease, background 0.2s ease;
+    z-index: 2;
+}
+
+.scan-card:hover .scan-delete-btn {
+    opacity: 1;
+}
+
+.scan-delete-btn:hover {
+    background: rgba(255, 23, 68, 0.6);
+    color: #fff;
+}
+
+.scan-delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
 .empty-table {
     padding: 40px;
@@ -390,13 +503,69 @@
     box-shadow: 0 8px 25px rgba(255, 23, 68, 0.4);
 }
 
+/* ── Lightbox ─────────────────────────────────────── */
+.lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.25s ease;
+}
+
+.lightbox-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 85vh;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.lightbox-content img {
+    max-width: 90vw;
+    max-height: 85vh;
+    object-fit: contain;
+    display: block;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.lightbox-close:hover { background: rgba(255, 23, 68, 0.7); }
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
     .stats-grid { grid-template-columns: repeat(3, 1fr); }
     .sc-value { font-size: 1.5rem; }
     .history-header { flex-direction: column; gap: 10px; }
+    .scan-cards-grid { grid-template-columns: 1fr; }
     .sessions-grid { grid-template-columns: 1fr; }
     .db-tabs { flex-wrap: wrap; }
+    .scan-delete-btn { opacity: 1; }
 }
 
 @media (max-width: 480px) {

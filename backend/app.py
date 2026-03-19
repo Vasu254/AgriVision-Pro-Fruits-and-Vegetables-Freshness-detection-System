@@ -3,7 +3,7 @@ Flask Backend for Fruits & Vegetables Freshness Detection
 Features: image predict, camera-frame, video quality analysis, object detection, database storage
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import tensorflow as tf
 import numpy as np
@@ -15,6 +15,7 @@ import cv2
 import tempfile
 import os
 import sqlite3
+import uuid
 from pathlib import Path
 from datetime import datetime
 
@@ -25,6 +26,8 @@ CORS(app)
 MODEL_PATH = '../ml-model/models/freshness_detector.h5'
 CLASS_INDICES_PATH = '../ml-model/models/class_indices.json'
 DB_PATH = os.path.join(os.path.dirname(__file__), 'freshness.db')
+STORE_DIR = os.path.join(os.path.dirname(__file__), 'store')
+os.makedirs(STORE_DIR, exist_ok=True)
 
 # Global variables
 model = None
@@ -97,7 +100,7 @@ def init_db():
     print("Database initialized successfully!")
 
 
-def save_scan(scan_type, filename, prediction_data, thumbnail_b64=None):
+def save_scan(scan_type, filename, prediction_data, thumbnail_val=None):
     """Save a scan result to the database."""
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -116,7 +119,7 @@ def save_scan(scan_type, filename, prediction_data, thumbnail_b64=None):
                 prediction_data.get('quality_grade', 'C'),
                 prediction_data.get('freshness_label', ''),
                 prediction_data.get('recommendation', ''),
-                thumbnail_b64
+                thumbnail_val
             ))
         scan_id = c.lastrowid
         conn.commit()
@@ -402,9 +405,13 @@ def predict():
         raw = model.predict(processed, verbose=0)[0]
         response = build_prediction_response(raw)
 
-        # Save to DB
-        thumb_b64 = base64.b64encode(image_bytes[:50000]).decode('utf-8') if len(image_bytes) < 200000 else None
-        scan_id = save_scan('image_upload', image_file.filename, response, thumb_b64)
+        # Save to store
+        ext = os.path.splitext(image_file.filename)[1] or '.jpg'
+        store_filename = f"{uuid.uuid4().hex}{ext}"
+        with open(os.path.join(STORE_DIR, store_filename), 'wb') as f:
+            f.write(image_bytes)
+
+        scan_id = save_scan('image_upload', image_file.filename, response, store_filename)
         response['scan_id'] = scan_id
 
         return jsonify(response)
@@ -431,8 +438,12 @@ def camera_frame():
         raw = model.predict(processed, verbose=0)[0]
         response = build_prediction_response(raw)
 
-        # Save to DB
-        scan_id = save_scan('camera', 'camera_frame', response)
+        # Save to store
+        store_filename = f"camera_{uuid.uuid4().hex}.jpg"
+        with open(os.path.join(STORE_DIR, store_filename), 'wb') as f:
+            f.write(image_bytes)
+
+        scan_id = save_scan('camera', 'camera_frame', response, store_filename)
         response['scan_id'] = scan_id
 
         return jsonify(response)
@@ -454,18 +465,26 @@ def batch_predict():
         score_sum = 0
         for image_file in request.files.getlist('images'):
             try:
-                processed = preprocess_image(image_file.read())
+                image_bytes = image_file.read()
+                processed = preprocess_image(image_bytes)
                 if processed is not None:
                     raw = model.predict(processed, verbose=0)[0]
                     resp = build_prediction_response(raw)
                     resp['filename'] = image_file.filename
+
+                    # Save to store
+                    ext = os.path.splitext(image_file.filename)[1] or '.jpg'
+                    store_filename = f"batch_{uuid.uuid4().hex}{ext}"
+                    with open(os.path.join(STORE_DIR, store_filename), 'wb') as f:
+                        f.write(image_bytes)
+
                     results.append(resp)
                     if resp.get('is_fresh'):
                         fresh_total += 1
                     else:
                         rotten_total += 1
                     score_sum += resp.get('freshness_score', 0)
-                    save_scan('batch', image_file.filename, resp)
+                    save_scan('batch', image_file.filename, resp, store_filename)
                 else:
                     results.append({'filename': image_file.filename, 'error': 'Failed to process image'})
             except Exception as e:
@@ -696,7 +715,10 @@ def video_detect_frames():
                             'predicted_class': result['predicted_class'],
                         })
 
-                        # Save each frame to DB
+                        # Save frame thumbnail to store
+                        store_fname = f"frame_{uuid.uuid4().hex}.jpg"
+                        cv2.imwrite(os.path.join(STORE_DIR, store_fname), thumb)
+
                         save_scan('video_frame', video_file.filename, {
                             'prediction': result['predicted_class'],
                             'is_fresh': is_fresh,
@@ -705,7 +727,7 @@ def video_detect_frames():
                             'quality_grade': get_quality_grade(fs),
                             'freshness_label': get_freshness_label(fs),
                             'recommendation': ''
-                        })
+                        }, store_fname)
 
                 frame_idx += 1
 
@@ -757,14 +779,14 @@ def db_history():
         if scan_type:
             c.execute('''SELECT id, scan_type, filename, predicted_class, is_fresh,
                         freshness_score, confidence, quality_grade, freshness_label,
-                        recommendation, created_at
+                        recommendation, thumbnail, created_at
                         FROM scan_history WHERE scan_type = ?
                         ORDER BY created_at DESC LIMIT ? OFFSET ?''',
                      (scan_type, limit, offset))
         else:
             c.execute('''SELECT id, scan_type, filename, predicted_class, is_fresh,
                         freshness_score, confidence, quality_grade, freshness_label,
-                        recommendation, created_at
+                        recommendation, thumbnail, created_at
                         FROM scan_history
                         ORDER BY created_at DESC LIMIT ? OFFSET ?''',
                      (limit, offset))
@@ -888,10 +910,46 @@ def db_video_sessions():
         return jsonify({'error': f'Database error: {str(e)}'}), 500
 
 
+@app.route('/store/<path:filename>')
+def serve_store(filename):
+    """Serve stored images from the store directory."""
+    return send_from_directory(STORE_DIR, filename)
+
+
+@app.route('/db/history/<int:scan_id>', methods=['DELETE'])
+def db_delete_scan(scan_id):
+    """Delete a single scan record and its stored image."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute('SELECT thumbnail FROM scan_history WHERE id = ?', (scan_id,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Record not found'}), 404
+        # Delete image file from store
+        if row['thumbnail']:
+            img_path = os.path.join(STORE_DIR, row['thumbnail'])
+            if os.path.exists(img_path):
+                os.remove(img_path)
+        c.execute('DELETE FROM scan_history WHERE id = ?', (scan_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': f'Scan #{scan_id} deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Delete error: {str(e)}'}), 500
+
+
 @app.route('/db/clear', methods=['POST'])
 def db_clear():
-    """Clear all database records."""
+    """Clear all database records and stored images."""
     try:
+        # Clear store folder
+        for f in os.listdir(STORE_DIR):
+            fpath = os.path.join(STORE_DIR, f)
+            if os.path.isfile(fpath):
+                os.remove(fpath)
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute('DELETE FROM scan_history')
@@ -899,7 +957,7 @@ def db_clear():
         c.execute('DELETE FROM video_sessions')
         conn.commit()
         conn.close()
-        return jsonify({'message': 'Database cleared successfully'})
+        return jsonify({'message': 'Database and stored images cleared successfully'})
     except Exception as e:
         return jsonify({'error': f'Clear error: {str(e)}'}), 500
 

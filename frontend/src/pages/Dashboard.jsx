@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './Dashboard.css';
 
 /**
- * Dashboard page — shows database stats, scan history, and session logs.
+ * Dashboard page — shows database stats, scan history with images, and session logs.
+ * Records are permanently stored in SQLite + local store folder.
+ * Only the user can delete records (individually or clear all).
  */
 export default function Dashboard({ apiUrl }) {
     const [stats, setStats] = useState(null);
@@ -14,6 +16,8 @@ export default function Dashboard({ apiUrl }) {
     const [error, setError] = useState(null);
     const [historyFilter, setHistoryFilter] = useState('');
     const [activeTab, setActiveTab] = useState('overview');
+    const [deletingId, setDeletingId] = useState(null);
+    const [lightboxSrc, setLightboxSrc] = useState(null);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -21,7 +25,7 @@ export default function Dashboard({ apiUrl }) {
         try {
             const [statsRes, histRes, batchRes, videoRes] = await Promise.all([
                 fetch(`${apiUrl}/db/stats`),
-                fetch(`${apiUrl}/db/history?limit=30${historyFilter ? `&type=${historyFilter}` : ''}`),
+                fetch(`${apiUrl}/db/history?limit=50${historyFilter ? `&type=${historyFilter}` : ''}`),
                 fetch(`${apiUrl}/db/batch-sessions`),
                 fetch(`${apiUrl}/db/video-sessions`),
             ]);
@@ -45,14 +49,39 @@ export default function Dashboard({ apiUrl }) {
 
     useEffect(() => { loadData(); }, [loadData]);
 
+    /* ── Delete a single scan record ── */
+    const handleDeleteScan = async (id) => {
+        if (!window.confirm(`Delete scan #${id}? This will also remove the stored image.`)) return;
+        setDeletingId(id);
+        try {
+            const res = await fetch(`${apiUrl}/db/history/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            loadData();
+        } catch (e) {
+            setError(`Failed to delete scan #${id}`);
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
+    /* ── Clear ALL records ── */
     const handleClearDB = async () => {
-        if (!window.confirm('Are you sure you want to clear ALL database records? This cannot be undone.')) return;
+        if (!window.confirm('Are you sure you want to clear ALL database records and stored images? This cannot be undone.')) return;
         try {
             await fetch(`${apiUrl}/db/clear`, { method: 'POST' });
             loadData();
         } catch (e) {
             setError('Failed to clear database');
         }
+    };
+
+    /* ── Extract produce name from predicted class ── */
+    const getProduceName = (row) => {
+        const cls = (row.predicted_class || '').replace(/_/g, ' ');
+        // Remove common prefixes like "fresh" or "rotten"
+        const cleaned = cls.replace(/^(fresh|rotten|good|bad|spoiled)\s*/i, '').trim();
+        return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : row.filename || 'Unknown';
     };
 
     const GRADE_COLORS = { A: '#00e676', B: '#69f0ae', C: '#ffeb3b', D: '#ff9100', F: '#ff1744' };
@@ -77,7 +106,7 @@ export default function Dashboard({ apiUrl }) {
                     <div className="section-tag">DATABASE</div>
                     <h1 className="section-title">📊 Analytics Dashboard</h1>
                     <p className="section-desc">
-                        All scan history, statistics, and session data stored in the database.
+                        Permanent storage — all scans are saved locally with images. Only you can delete records.
                     </p>
                 </div>
 
@@ -182,7 +211,7 @@ export default function Dashboard({ apiUrl }) {
                         onClick={() => setActiveTab('videos')}>🎥 Video Sessions ({videoSessions.length})</button>
                 </div>
 
-                {/* Scan History Tab */}
+                {/* ──────── Scan History Tab (Card Grid) ──────── */}
                 {activeTab === 'overview' && (
                     <div className="history-section">
                         <div className="history-header">
@@ -200,43 +229,68 @@ export default function Dashboard({ apiUrl }) {
                             </div>
                         </div>
 
-                        <div className="history-table-wrap">
-                            <table className="history-table">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Type</th>
-                                        <th>File</th>
-                                        <th>Result</th>
-                                        <th>Score</th>
-                                        <th>Grade</th>
-                                        <th>Confidence</th>
-                                        <th>Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {history.map(row => (
-                                        <tr key={row.id} className={row.is_fresh ? 'row-fresh' : 'row-rotten'}>
-                                            <td className="td-id">#{row.id}</td>
-                                            <td><span className="type-badge">{row.scan_type}</span></td>
-                                            <td className="td-file">{row.filename || '-'}</td>
-                                            <td>
-                                                <span className={`verdict-chip ${row.is_fresh ? 'vc-good' : 'vc-bad'}`}>
-                                                    {row.is_fresh ? '✅ GOOD' : '🚫 BAD'}
-                                                </span>
-                                            </td>
-                                            <td>{row.freshness_score?.toFixed(1)}%</td>
-                                            <td><span style={{ color: GRADE_COLORS[row.quality_grade] }}>{row.quality_grade}</span></td>
-                                            <td>{(row.confidence * 100).toFixed(0)}%</td>
-                                            <td className="td-time">{new Date(row.created_at).toLocaleString()}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            {history.length === 0 && (
-                                <div className="empty-table">No scan records yet. Start analyzing produce!</div>
-                            )}
+                        <div className="scan-cards-grid">
+                            {history.map(row => (
+                                <div key={row.id} className={`scan-card glass-card ${row.is_fresh ? 'scan-fresh' : 'scan-rotten'}`}>
+                                    {/* Image */}
+                                    <div className="scan-card-img" onClick={() => row.thumbnail && setLightboxSrc(`${apiUrl}/store/${row.thumbnail}`)}>
+                                        {row.thumbnail ? (
+                                            <img
+                                                src={`${apiUrl}/store/${row.thumbnail}`}
+                                                alt={getProduceName(row)}
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <div className="no-img">📷</div>
+                                        )}
+                                    </div>
+
+                                    {/* Info */}
+                                    <div className="scan-card-body">
+                                        <div className="scan-card-top">
+                                            <span className="scan-produce-name">{getProduceName(row)}</span>
+                                            <span className={`verdict-chip ${row.is_fresh ? 'vc-good' : 'vc-bad'}`}>
+                                                {row.is_fresh ? '✅ GOOD' : '🚫 BAD'}
+                                            </span>
+                                        </div>
+
+                                        <div className="scan-card-metrics">
+                                            <div className="scm-item">
+                                                <span className="scm-label">Score</span>
+                                                <span className="scm-value">{row.freshness_score?.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="scm-item">
+                                                <span className="scm-label">Grade</span>
+                                                <span className="scm-value" style={{ color: GRADE_COLORS[row.quality_grade] }}>{row.quality_grade}</span>
+                                            </div>
+                                            <div className="scm-item">
+                                                <span className="scm-label">Confidence</span>
+                                                <span className="scm-value">{(row.confidence * 100).toFixed(0)}%</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="scan-card-footer">
+                                            <span className="type-badge">{row.scan_type}</span>
+                                            <span className="scan-time">{new Date(row.created_at).toLocaleString()}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Delete */}
+                                    <button
+                                        className="scan-delete-btn"
+                                        title="Delete this record"
+                                        disabled={deletingId === row.id}
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteScan(row.id); }}
+                                    >
+                                        {deletingId === row.id ? '⏳' : '🗑️'}
+                                    </button>
+                                </div>
+                            ))}
                         </div>
+
+                        {history.length === 0 && (
+                            <div className="empty-table">No scan records yet. Start analyzing produce!</div>
+                        )}
                     </div>
                 )}
 
@@ -297,9 +351,19 @@ export default function Dashboard({ apiUrl }) {
                 {/* Actions */}
                 <div className="db-actions">
                     <button className="btn-primary" onClick={loadData}>🔄 Refresh Data</button>
-                    <button className="btn-danger" onClick={handleClearDB}>🗑️ Clear Database</button>
+                    <button className="btn-danger" onClick={handleClearDB}>🗑️ Clear All Data</button>
                 </div>
             </div>
+
+            {/* Lightbox */}
+            {lightboxSrc && (
+                <div className="lightbox-overlay" onClick={() => setLightboxSrc(null)}>
+                    <div className="lightbox-content" onClick={e => e.stopPropagation()}>
+                        <img src={lightboxSrc} alt="Scan preview" />
+                        <button className="lightbox-close" onClick={() => setLightboxSrc(null)}>✕</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
