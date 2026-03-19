@@ -1,0 +1,26 @@
+{
+  "name": "freshness-detection-project",
+  "version": "1.0.0",
+  "description": "Fruits and Vegetables Freshness Detection System",
+  "author": "Your Name",
+  "license": "MIT",
+  "scripts": {
+    "start:backend": "cd backend && python app.py",
+    "start:frontend": "cd frontend && npm run dev",
+    "install:backend": "cd backend && pip install -r requirements.txt",
+    "install:frontend": "cd frontend && npm install",
+    "install:ml": "cd ml-model && pip install -r requirements.txt",
+    "setup": "npm run install:ml && npm run install:backend && npm run install:frontend",
+    "train": "cd ml-model && python train_model.py",
+    "augment": "cd ml-model && python data_augmentation.py"
+  },
+  "keywords": [
+    "machine-learning",
+    "deep-learning",
+    "computer-vision",
+    "freshness-detection",
+    "react",
+    "flask",
+    "tensorflow"
+  ]
+}
