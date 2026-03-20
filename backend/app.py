@@ -16,8 +16,10 @@ import tempfile
 import os
 import sqlite3
 import uuid
+import hashlib
 from pathlib import Path
 from datetime import datetime
+
 
 app = Flask(__name__)
 CORS(app)
@@ -55,6 +57,15 @@ def init_db():
     """Initialize SQLite database with all tables."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
+    # Users table — for login/register
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
 
     # Scan history — stores every single prediction
     c.execute('''CREATE TABLE IF NOT EXISTS scan_history (
@@ -98,6 +109,71 @@ def init_db():
     conn.commit()
     conn.close()
     print("Database initialized successfully!")
+
+
+
+def hash_password(password):
+    """SHA-256 hash for password storage."""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+# ─── AUTH ROUTES ──────────────────────────────────────────────────
+
+from flask import Blueprint
+auth_bp = Blueprint('auth', __name__)
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    username = (data.get('username') or '').strip()
+    email    = (data.get('email')    or '').strip().lower()
+    password =  data.get('password') or ''
+    if not username or not email or not password:
+        return jsonify({'error': 'All fields are required'}), 400
+    if len(username) < 3:
+        return jsonify({'error': 'Username must be at least 3 characters'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+                  (username, email, hash_password(password)))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'Account created successfully'}), 201
+    except sqlite3.IntegrityError as e:
+        if 'username' in str(e):
+            return jsonify({'error': 'Username already taken'}), 409
+        return jsonify({'error': 'Email already registered'}), 409
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = (data.get('username') or '').strip()
+    password =  data.get('password') or ''
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('SELECT id, username, email FROM users WHERE username=? AND password_hash=?',
+                  (username, hash_password(password)))
+        user = c.fetchone()
+        conn.close()
+        if not user:
+            return jsonify({'error': 'Invalid username or password'}), 401
+        return jsonify({'user': {'id': user[0], 'username': user[1], 'email': user[2]}}), 200
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+app.register_blueprint(auth_bp, url_prefix='/auth')
+
+# ──────────────────────────────────────────────────────────────────
 
 
 def save_scan(scan_type, filename, prediction_data, thumbnail_val=None):

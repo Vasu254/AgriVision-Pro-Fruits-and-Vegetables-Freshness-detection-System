@@ -1,11 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import "./Navbar.css";
+
+const PROTECTED_LINKS = [
+  { to: "/detect",    icon: "🔍", label: "Detect"   },
+  { to: "/batch",     icon: "📦", label: "Batch"    },
+  { to: "/camera",    icon: "🏭", label: "Camera"   },
+  { to: "/video",     icon: "🎥", label: "Video"    },
+  { to: "/dashboard", icon: "📊", label: "Database" },
+  { to: "/about",     icon: "ℹ️", label: "About"    },
+  { to: "/contact",   icon: "✉️", label: "Contact"  },
+];
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -13,9 +26,12 @@ const Navbar = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location]);
+  useEffect(() => { setMenuOpen(false); }, [location]);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   return (
     <nav className={`navbar ${scrolled ? "scrolled" : ""}`}>
@@ -28,63 +44,47 @@ const Navbar = () => {
           </span>
         </NavLink>
 
-        {/* Desktop Nav Links */}
+        {/* Desktop Nav Links (collapsible on mobile) */}
         <div className={`navbar-links ${menuOpen ? "open" : ""}`}>
-          <NavLink
-            to="/"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-            end
-          >
+          <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} end>
             <span className="nav-icon">🏠</span> Home
           </NavLink>
-          <NavLink
-            to="/detect"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-icon">🔍</span> Detect
-          </NavLink>
-          <NavLink
-            to="/batch"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-icon">📦</span> Batch
-          </NavLink>
-          <NavLink
-            to="/camera"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-icon">🏭</span> Sort
-          </NavLink>
-          <NavLink
-            to="/video"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-icon">🎥</span> Video
-          </NavLink>
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-icon">📊</span> Database
-          </NavLink>
-          <NavLink
-            to="/about"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-icon">ℹ️</span> About
-          </NavLink>
-          <NavLink
-            to="/contact"
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-icon">✉️</span> Contact
-          </NavLink>
+
+          {user && PROTECTED_LINKS.map(({ to, icon, label }) => (
+            <NavLink key={to} to={to} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
+              <span className="nav-icon">{icon}</span> {label}
+            </NavLink>
+          ))}
+
+          {/* Mobile-only auth links */}
+          {!user && (
+            <>
+              <NavLink to="/login"    className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><span className="nav-icon">🔐</span> Login</NavLink>
+              <NavLink to="/register" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}><span className="nav-icon">✨</span> Register</NavLink>
+            </>
+          )}
+          {user && (
+            <button className="nav-link nav-logout-btn" onClick={handleLogout}>
+              <span className="nav-icon">🚪</span> Logout
+            </button>
+          )}
         </div>
 
-        {/* CTA Button */}
-        <NavLink to="/batch" className="navbar-cta">
-          Analyze Now →
-        </NavLink>
+        {/* Desktop right side */}
+        {user ? (
+          <div className="navbar-user-area">
+            <div className="user-chip">
+              <span className="user-avatar">{(user.username?.[0] ?? '?').toUpperCase()}</span>
+              <span className="user-name">{user.username}</span>
+            </div>
+            <button className="navbar-logout-btn" onClick={handleLogout}>🚪 Logout</button>
+          </div>
+        ) : (
+          <div className="navbar-auth-btns">
+            <NavLink to="/login"    className="navbar-login-btn">Sign In</NavLink>
+            <NavLink to="/register" className="navbar-cta">Register →</NavLink>
+          </div>
+        )}
 
         {/* Hamburger */}
         <button
@@ -92,9 +92,7 @@ const Navbar = () => {
           onClick={() => setMenuOpen(!menuOpen)}
           aria-label="Toggle menu"
         >
-          <span />
-          <span />
-          <span />
+          <span /><span /><span />
         </button>
       </div>
     </nav>
