@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import './Contact.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const SOCIALS = [
-    { icon: '🐙', label: 'GitHub', href: 'https://github.com', color: '#f0f6fc' },
-    { icon: '💼', label: 'LinkedIn', href: 'https://linkedin.com', color: '#0a66c2' },
-    { icon: '📧', label: 'Email', href: 'mailto:freshcheck@example.com', color: '#ea4335' },
+    { icon: '🐙', label: 'GitHub', href: 'https://github.com/Vasu254/AgriVision-Pro-Fruits-and-Vegetables-Freshness-detection-System', color: '#f0f6fc' },
+    { icon: '💼', label: 'LinkedIn', href: 'https://www.linkedin.com/in/vasukumartelugu/', color: '#0a66c2' },
+    { icon: '📧', label: 'Email', href: 'mailto:agrifreshpro@gmail.com', color: '#ea4335' },
 ];
 
 const FAQ = [
@@ -36,15 +38,35 @@ export default function Contact() {
         }
     };
 
-    const handleSubmit = (e) => {
+    const [loading, setLoading] = useState(false);
+    const [submitError, setSubmitError] = useState('');
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const errs = validate();
         if (Object.keys(errs).length > 0) {
             setErrors(errs);
             return;
         }
-        // Simulated submission
-        setSubmitted(true);
+        setLoading(true);
+        setSubmitError('');
+        try {
+            const res = await fetch(`${API_URL}/contact`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(form),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setSubmitted(true);
+            } else {
+                setSubmitError(data.error || 'Failed to send message. Please try again.');
+            }
+        } catch (err) {
+            setSubmitError('Network error. Please check your connection and try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const [openFaq, setOpenFaq] = useState(null);
@@ -104,8 +126,9 @@ export default function Contact() {
                                         {errors.message && <div className="field-error">{errors.message}</div>}
                                         <div className="char-count">{form.message.length} characters</div>
                                     </div>
-                                    <button type="submit" className="btn-primary submit-btn">
-                                        ✉️ Send Message
+                                    {submitError && <div className="submit-error">{submitError}</div>}
+                                    <button type="submit" className="btn-primary submit-btn" disabled={loading}>
+                                        {loading ? '⏳ Sending...' : '✉️ Send Message'}
                                     </button>
                                 </form>
                             </div>
@@ -129,7 +152,7 @@ export default function Contact() {
                                 <div className="info-icon">📍</div>
                                 <div>
                                     <div className="info-label">Location</div>
-                                    <div className="info-value">Hyderabad, India</div>
+                                    <div className="info-value">Nashik, India</div>
                                 </div>
                             </div>
                             <div className="info-card glass-card">

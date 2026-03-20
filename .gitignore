@@ -61,3 +61,7 @@ frontend/.env
 # Misc
 *.zip
 *.tar.gz
+*.docx
+*.doc
+*.pptx
+*.ppt

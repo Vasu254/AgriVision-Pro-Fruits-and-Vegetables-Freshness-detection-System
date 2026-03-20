@@ -962,6 +962,102 @@ def db_clear():
         return jsonify({'error': f'Clear error: {str(e)}'}), 500
 
 
+# ─── CONTACT FORM ENDPOINT ───────────────────────────────────────
+
+@app.route('/contact', methods=['POST'])
+def contact():
+    """Receive contact form submissions and send email notification."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        subject = data.get('subject', '').strip() or 'No Subject'
+        message = data.get('message', '').strip()
+
+        if not name or not email or not message:
+            return jsonify({'error': 'Name, email, and message are required'}), 400
+
+        # Store in database
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('''CREATE TABLE IF NOT EXISTS contact_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                subject TEXT,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            c.execute('INSERT INTO contact_messages (name, email, subject, message) VALUES (?, ?, ?, ?)',
+                      (name, email, subject, message))
+            conn.commit()
+            conn.close()
+        except Exception as db_err:
+            print(f"DB contact save error: {db_err}")
+
+        # Send email notification
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+
+            RECIPIENT_EMAIL = 'agrifreshpro@gmail.com'
+
+            msg = MIMEMultipart()
+            msg['From'] = email
+            msg['To'] = RECIPIENT_EMAIL
+            msg['Subject'] = f'[AgriVision Contact] {subject}'
+
+            body = f"""
+New Contact Form Submission from AgriVision Pro
+{'='*50}
+
+Name: {name}
+Email: {email}
+Subject: {subject}
+
+Message:
+{message}
+
+{'='*50}
+Sent from AgriVision Pro Contact Form
+            """.strip()
+
+            msg.attach(MIMEText(body, 'plain'))
+
+            # Using Gmail SMTP
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            # Note: For Gmail, you need an App Password.
+            # Set environment variables SMTP_EMAIL and SMTP_PASSWORD
+            smtp_email = os.environ.get('SMTP_EMAIL', '')
+            smtp_password = os.environ.get('SMTP_PASSWORD', '')
+
+            if smtp_email and smtp_password:
+                server.login(smtp_email, smtp_password)
+                server.sendmail(smtp_email, RECIPIENT_EMAIL, msg.as_string())
+                server.quit()
+                print(f"Email sent to {RECIPIENT_EMAIL}")
+            else:
+                print(f"SMTP credentials not configured. Message stored in DB only.")
+                print(f"To enable email: set SMTP_EMAIL and SMTP_PASSWORD environment variables")
+        except Exception as email_err:
+            print(f"Email send error (message still saved to DB): {email_err}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Your message has been received! We will get back to you within 24 hours.'
+        })
+
+    except Exception as e:
+        print(f"Contact form error: {e}")
+        return jsonify({'error': f'Failed to process contact form: {str(e)}'}), 500
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("FRUITS & VEGETABLES FRESHNESS DETECTION - BACKEND SERVER v4.0")
