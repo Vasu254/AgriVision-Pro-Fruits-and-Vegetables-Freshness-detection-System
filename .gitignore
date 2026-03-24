@@ -54,6 +54,7 @@ models/
 datasets/
 reorganized/
 *.csv
+backend/store/
 
 # Frontend env
 frontend/.env

@@ -100,6 +100,13 @@ export default function Camera({ apiUrl }) {
 
     useEffect(() => () => stopCamera(), [stopCamera]);
 
+    // Attach stream to video element when it mounts
+    useEffect(() => {
+        if (cameraOn && videoRef.current && streamRef.current && !videoRef.current.srcObject) {
+            videoRef.current.srcObject = streamRef.current;
+        }
+    }, [cameraOn]);
+
     // ── Video element ready handler (KEY FIX) ─────────────────────
     const handleVideoReady = useCallback(() => {
         const video = videoRef.current;
@@ -416,6 +423,7 @@ export default function Camera({ apiUrl }) {
                                         }}
                                         muted
                                         playsInline
+                                        autoPlay
                                         onLoadedMetadata={handleVideoReady}
                                     />
 

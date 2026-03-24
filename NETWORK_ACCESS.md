@@ -1,5 +1,7 @@
 # 🌐 Network Access Guide
 
+
+cmd.exe /c "start.bat"
 ## How to Access the Application from Other Devices on Your Network
 
 This guide will help you access the Fruits & Vegetables Freshness Detection application from any device on your local network (not just localhost).
